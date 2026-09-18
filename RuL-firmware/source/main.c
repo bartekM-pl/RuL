@@ -87,8 +87,8 @@ void SysTick_Handler(){
 		if(button_cnt > 20){	//przytrzymanie 2s -> wyłączenie
 			button_cnt = 0;
 			LED_blue(1);
-			//OLED_clear(0);
-			//OLED_refresh();
+			OLED_clear(0);
+			OLED_refresh();
 
 			while(Button_state()) {}
 			PSU_turnOff();
@@ -96,7 +96,7 @@ void SysTick_Handler(){
 		else if((button_cnt >= 2) && !Button_state()){	//przyciśnięcie >= 300ms i puszczenie
 			button_cnt = 0;
 			LED_blue(1);
-			//OLED_nextScreen();
+			OLED_nextScreen();
 		}
 		else {
 			LED_blue(0);
@@ -106,12 +106,12 @@ void SysTick_Handler(){
 
 	// Uśpienie ekranu po 5s
 	if(button_idle_cnt > 50){
-		//OLED_sleepScreen();
+		OLED_sleepScreen();
 	}
 
 	//co 250ms rysuj OLED
 	if(!(Clock % 250)){
-		//OLED_render(&status_d, &sensors_d, &max_d);
+		OLED_render(&status_d, &sensors_d, &max_d);
 	}
 
 	//Heartbeat LED
@@ -138,36 +138,57 @@ int main(void) {
     BOARD_InitBootPeripherals();
     SysTick_Config(CLOCK_GetFreq(kCLOCK_CoreSysClk) / 1000U);
     PSU_turnOn();
-    //printf("MCU ready\n");
+    printf("MCU ready\n");
+	
+	LPS_init();	 printf("LPS ready\n");
+    LIS_init();  printf("LIS ready\n");
+    OLED_init(); printf("OLED ready\n");
+	
+	FlightState_Init(&sensors_d);
 
+    OLED_clear(0);         printf("OLED clear ready\n");
+    OLED_statusTemplate(); printf("OLED template ready\n");
+    OLED_refresh();        printf("OLED refresh ready\n");
 
-    const tpm_config_t TPM_2_config = {
-      .prescale = kTPM_Prescale_Divide_4,
-      .useGlobalTimeBase = false,
-      .triggerSelect = kTPM_Trigger_Select_0,
-      .triggerSource = kTPM_TriggerSource_External,
-      .enableDoze = false,
-      .enableDebugMode = false,
-      .enableReloadOnTrigger = false,
-      .enableStopOnOverflow = false,
-      .enableStartOnTrigger = false,
-      .enablePauseOnTrigger = false
-    };
+	max_d.acc      = 0.0f;
+    max_d.altitude = 0.0f;
+    max_d.velocity = 0.0f;
+	
+	while(1) {
+    	switch(FlightState_getState()){
+    	case WAIT_FOR_LAUNCH:
+    		meas_period = 100;
+    		log_period  = 500;
+    		break;
+    	case ASCENT:
+			meas_period = 100;
+			log_period  = 100;
+			break;
+    	case FALLING:
+			meas_period = 500;
+			log_period  = 500;
+			break;
+    	case LANDING:
+			meas_period = 500;
+			log_period  = 1000;
+			break;
+    	}
+		if(counter_meas >= meas_period){
+			counter_meas = 0;
 
-    const tpm_chnl_pwm_signal_param_t TPM_2_pwmSignalParams[] = {
-      {
-        .chnlNumber = kTPM_Chnl_1,
-        .level = kTPM_HighTrue,
-        .dutyCyclePercent = 0
-      }
-    };
-
-    uint16_t freq = 1000;
-
-    while(1) {
+			LPS_update(&sensors_d);
+			LIS_update(&sensors_d);
+			FlightState_Detect(Clock);
+		}
 			Buzzer_ON();
 			delay(300);
 
+		if(counter_log >= log_period){
+			counter_log = 0;
+			//FLASH_write(&sensors_d);
+			//printf("Press: %lu Pa\tTemp: %li C\tAcc: %li %li %li\n", (uint32_t)sensors_d.pressure, (int32_t)sensors_d.temp, (int32_t)(sensors_d.acc.x*100), (int32_t)(sensors_d.acc.y*100), (int32_t)(sensors_d.acc.z*100));
+		}
     }
+
     return 0 ;
 }
