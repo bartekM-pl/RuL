@@ -18,7 +18,7 @@
 //static FLASH_pageStruct_t FLASH_pageStruct_d;
 
 void FLASH_init(){
-
+	SPI_CS_FLASH(1);
 }
 
 

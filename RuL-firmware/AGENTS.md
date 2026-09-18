@@ -40,7 +40,7 @@ startup/         Vector table / reset (startup_mkl27z4.c)
 | `source/flash.c` | S25FL064L 4-byte-address NOR (SPI) |
 | `source/FS.c` | Intended filesystem/log layer — **stubs** |
 | `source/oled.c` | 96×32 SSD1306-style OLED over I2C 0x3C |
-| `source/buzzer.c` | TPM2 PWM duty cycle |
+| `source/buzzer.c` | TPM2 PWM buzzer **service** (`Buzzer_service` every 1 ms) |
 | `source/analog.c` | Battery voltage from ADC raw |
 | `source/PSU.c` | Power latch on / off |
 | `source/flightStateDetector.c` | Flight-phase FSM — **placeholder 3 s timeouts** |
@@ -75,13 +75,13 @@ LEDs are **active-low**: `LED_*(1)` turns the LED on.
 - **LIS2HH12** accel, SPI, WHO_AM_I `0x44`. Init: 25 Hz, ±16 g, 14-bit. Accel scale in code: `/ 2048.0f` → g.
 - **LPS25HB** baro, SPI, WHO_AM_I `0xBD`. Init: 25 Hz, avg 8/8. Pressure `/40.960` → Pa. Temp `42.5 + raw/480` → °C. `altitude` is written as `0` (not computed).
 - **S25FL064L** NOR flash, JEDEC `01 60 17`. Commands use 4-byte address (`PP4`/`READ4`). Page size helper: `PAGE_SIZE` is **log2**, so `n=8` → 256 B (`2<<PAGE_SIZE` in transfers looks wrong vs the comment — verify before using page R/W).
-- **OLED** I2C address `0x3C`, 96×32, page addressing. Buffer `OLED_dispBuff[96][4]`.
+- **OLED** I2C address `0x3C`, 96×32, page addressing. Buffer `OLED_dispBuff[96][4]` (column, page). `OLED_refresh()` is **4 I2C writes** (page+column setup + 96 px per page).
 
 ### Peripherals (as configured)
 
 - SPI0 master, **500 kHz**, 8-bit, mode 0, DMA ch 0/1, SS as GPIO.
 - I2C0 master, **600 kHz** in C (`I2C_0_config`); Config Tools YAML still says 100 kHz — C wins until regenerated.
-- TPM2 PWM 2800 Hz, ch1 duty 0 at init. `Buzzer_ON()` sets duty 18%.
+- TPM2 PWM 2800 Hz, ch1 duty 0 at init. `Buzzer_service()` in SysTick drives patterns; `Buzzer_shortBeep` / `longBeep` / `pulse` / `stop`. Duty 18% while on.
 - ADC0: 16-bit SE, continuous, HW avg 32, IRQ on conversion. `Analog_setVbatRaw()` uses `2 * raw * 3 / 65536` (divider + 3 V ref).
 - SysTick: 1 ms. `Clock` and `delay()` both depend on `SysTick_Handler` → `TimingDelay_Decrement()`.
 
@@ -90,6 +90,7 @@ LEDs are **active-low**: `LED_*(1)` turns the LED on.
 ```
 SysTick 1 ms
   ├─ delay() countdown
+  ├─ Buzzer_service()  (tone / gap / stop)
   ├─ Clock++, counter_meas, counter_log
   ├─ every 100 ms: button hold 2 s → OLED clear + PSU_turnOff();
   │                 short press ≥300 ms → OLED_nextScreen()
@@ -101,12 +102,13 @@ ADC0 IRQ → Analog_setVbatRaw → status_d.vbat
            status_d.memfree currently hardcoded 100.0f
 
 main():
-  PSU_turnOn → LPS_init → LIS_init → OLED_init → FlightState_Init
-  OLED status template
+  PSU_turnOn → LPS_init → LIS_init → OLED_init → FLASH_init → FS_initFS
+  WHO_AM_I / JEDEC (LPS 0xBD, LIS 0x44, flash 01 60 17)
+    OK → Buzzer_shortBeep(); fail → red LED + Buzzer_pulse(3, 80, 80, 0)
+  FlightState_Init, OLED status template
   loop:
     set meas_period / log_period from FlightState_getState()
-    if counter_meas elapsed: LPS_update, LIS_update, FlightState_Detect(Clock)
-    Buzzer_ON(); delay(300)          ← still every iteration
+    if counter_meas elapsed: sensors_d.time = Clock; LPS_update; LIS_update; FlightState_Detect(Clock)
     if counter_log elapsed: FLASH_write commented out
 ```
 
@@ -121,7 +123,7 @@ State-dependent periods (ms, matching SysTick 1 ms counters):
 
 OLED and button handling run in `SysTick_Handler`. I2C/SPI helpers are blocking DMA polls — **not ISR-safe**. `OLED_render` / `OLED_nextScreen` / power-off wait-for-release from SysTick can stall the 1 ms tick.
 
-`FLASH_init()` is not called. `sensors_d.time` is never written. `max_d` is zeroed at boot and never updated.
+`FLASH_init()` only deasserts flash CS and restores sensor SPI mux. `sensors_d.time` is set on each measure. `max_d` is zeroed at boot and never updated.
 
 ### Shared data (`struct.h`)
 
@@ -148,14 +150,14 @@ Short button press calls `OLED_nextScreen()` from SysTick.
 
 ## Current completeness (do not assume it flies)
 
-`main()` latches power, inits LPS / LIS / OLED / flight FSM, then samples sensors and runs `FlightState_Detect`. OLED UI is live in SysTick. **Flash is not inited; `FLASH_write` is commented.** Flight transitions are still 3 s placeholders. The main loop still **buzzes every iteration** (`Buzzer_ON` + `delay(300)`), which blocks sampling.
+`main()` latches power, inits LPS / LIS / OLED / flash CS / FS stub, probes WHO_AM_I + JEDEC, then samples sensors and runs `FlightState_Detect`. OLED UI is live in SysTick. **`FLASH_write` is commented.** Flight transitions are still 3 s placeholders. Buzzer is a 1 ms SysTick service: boot uses `Buzzer_shortBeep()` (OK) or `Buzzer_pulse(3, …)` (ID fail).
 
 Boot `printf` traces exist (`MCU ready`, `LPS/LIS/OLED ready`). `SDK_DEBUGCONSOLE=0` — they only appear if semihosting / another console is actually wired.
 
 Incomplete or suspicious:
 
-- `FS.c` — empty `FS_initFS`, table/page scanners; only `FS_testWR`.
-- `flash.c` — `FLASH_init`, `FLASH_sectorErase`, `FLASH_push`, buffer helpers empty. `FLASH_write(sensors_t*)` commented in both `flash.c` and the main log slot.
+- `FS.c` — empty `FS_initFS` (now called from `main`), table/page scanners; only `FS_testWR`.
+- `flash.c` — `FLASH_init` is CS/mux only. `FLASH_sectorErase`, `FLASH_push`, buffer helpers empty. `FLASH_write(sensors_t*)` commented in both `flash.c` and the main log slot.
 - OLED I2C from `SysTick_Handler` (render / next screen / clear on power-off).
 - `PSU_lowPowerMode` / `highPowerMode` empty.
 - `I2C_Read` uses `dataSize = length-1` with a `????` comment — treat as a bug until proven.
@@ -166,7 +168,7 @@ Incomplete or suspicious:
 ## Coding conventions
 
 - C, not C++. Pair `foo.c` / `foo.h` per driver. Include guard `FOO_H_`.
-- NXP style mixed with local helpers. Prefix by module: `LIS_`, `LPS_`, `FLASH_`, `OLED_`, `PSU_`, `FlightState_`, `SPI_`, `I2C_`, `Analog_`.
+- NXP style mixed with local helpers. Prefix by module: `LIS_`, `LPS_`, `FLASH_`, `OLED_`, `PSU_`, `FlightState_`, `SPI_`, `I2C_`, `Analog_`, `Buzzer_`.
 - Comments are **Polish or English**; keep the language of nearby comments. Do not mass-translate.
 - Blocking DMA + flag poll is the existing I/O pattern. Do not introduce an RTOS or HAL rewrite unless asked.
 - Active-low LEDs and inverted CS helpers: copy existing helpers, do not drive those pins “intuitively”.
@@ -215,5 +217,5 @@ There is no CMake / Makefile checked in; the Eclipse managed builder generates `
 | Log format / files | `FS.c` (needs implementing) |
 | Display layout | `oled.c` templates + `OLED_render*` |
 | Pinout | `board/pin_mux.*` + this table |
-| PWM beep | `buzzer.c` + `TPM_2_*` in `peripherals.c` |
+| PWM beep | `buzzer.c` — `Buzzer_shortBeep` / `longBeep` / `pulse` / `stop`; `Buzzer_service` in SysTick |
 | Battery scale | `analog.c` |

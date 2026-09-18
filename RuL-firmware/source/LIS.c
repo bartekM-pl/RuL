@@ -7,6 +7,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include "fsl_common.h"
 #include "MKL27Z4.h"
 #include "struct.h"
 #include "spi.h"

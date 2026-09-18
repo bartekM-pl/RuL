@@ -12,7 +12,7 @@ MCU: NXP **MKL27Z256VFM4** (Cortex-M0+, 8 MHz). No RTOS. Built with MCUXpresso /
 - Shows status on a 96×32 OLED (button cycles screens; 5 s idle sleeps)
 - Power latch, RGB LEDs, buzzer, battery ADC
 
-Boot: power latch → LPS / LIS / OLED init → flight FSM → measure loop. Sample and log rates depend on flight state. Flash is not initialized. The loop still calls `Buzzer_ON()` every pass. See [TODO.md](TODO.md).
+Boot: power latch → LPS / LIS / OLED / flash CS → WHO_AM_I + JEDEC check → flight FSM → measure loop. Sample and log rates depend on flight state. Flash writes are not enabled. One short beep at boot means the buses answered; three beeps and a red LED means an ID failed (`Buzzer_service` in SysTick). See [TODO.md](TODO.md).
 
 ## Layout
 

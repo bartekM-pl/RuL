@@ -86,14 +86,21 @@ void OLED_sendData(uint8_t val){
 }
 
 void OLED_refresh(){
-  uint8_t i, j;
+  static uint8_t buf[7 + 96];
+  uint8_t page, col;
 
-  for (i = 0; i < 4; i ++) {
-    OLED_sendCommand(0xB0 + i);
-    OLED_setColStart();
-    for (j = 0; j < 96; j ++) {
-      OLED_sendData(OLED_d.OLED_dispBuff[j][i]);
+  for (page = 0; page < 4; page++) {
+    buf[0] = 0x80;
+    buf[1] = 0xB0 + page;
+    buf[2] = 0x80;
+    buf[3] = 0x00; /* col low, same as OLED_setColStart */
+    buf[4] = 0x80;
+    buf[5] = 0x12; /* col high */
+    buf[6] = 0x40;
+    for (col = 0; col < 96; col++) {
+      buf[7 + col] = OLED_d.OLED_dispBuff[col][page];
     }
+    I2C_Send(0x3C, 0, 0, buf, 7 + 96);
   }
 }
 

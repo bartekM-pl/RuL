@@ -72,6 +72,7 @@ uint32_t log_period  = 100;
 
 void SysTick_Handler(){
 	TimingDelay_Decrement();
+	Buzzer_service();
 	counter_meas++;
 	counter_log++;
 	Clock++;
@@ -87,6 +88,7 @@ void SysTick_Handler(){
 		if(button_cnt > 20){	//przytrzymanie 2s -> wyłączenie
 			button_cnt = 0;
 			LED_blue(1);
+			Buzzer_stop();
 			OLED_clear(0);
 			OLED_refresh();
 
@@ -139,11 +141,35 @@ int main(void) {
     SysTick_Config(CLOCK_GetFreq(kCLOCK_CoreSysClk) / 1000U);
     PSU_turnOn();
     printf("MCU ready\n");
-	
+
 	LPS_init();	 printf("LPS ready\n");
     LIS_init();  printf("LIS ready\n");
     OLED_init(); printf("OLED ready\n");
-	
+    FLASH_init();
+    FS_initFS();
+
+	uint8_t bus_ok = 1;
+	if(LPS_WhoIam() != 0xBD){
+		bus_ok = 0;
+		printf("LPS WHO_AM_I fail\n");
+	}
+	if(LIS_WhoIam() != 0x44){
+		bus_ok = 0;
+		printf("LIS WHO_AM_I fail\n");
+	}
+	if(!SPI_MemoryCheck()){
+		bus_ok = 0;
+		printf("FLASH JEDEC fail\n");
+	}
+
+	if(bus_ok){
+		LED_red(0);
+		Buzzer_shortBeep();
+	} else {
+		LED_red(1);
+		Buzzer_pulse(3, BUZZER_SHORT_MS, BUZZER_SHORT_MS, 0);
+	}
+
 	FlightState_Init(&sensors_d);
 
     OLED_clear(0);         printf("OLED clear ready\n");
@@ -153,7 +179,7 @@ int main(void) {
 	max_d.acc      = 0.0f;
     max_d.altitude = 0.0f;
     max_d.velocity = 0.0f;
-	
+
 	while(1) {
     	switch(FlightState_getState()){
     	case WAIT_FOR_LAUNCH:
@@ -176,12 +202,11 @@ int main(void) {
 		if(counter_meas >= meas_period){
 			counter_meas = 0;
 
+			sensors_d.time = Clock;
 			LPS_update(&sensors_d);
 			LIS_update(&sensors_d);
 			FlightState_Detect(Clock);
 		}
-			Buzzer_ON();
-			delay(300);
 
 		if(counter_log >= log_period){
 			counter_log = 0;

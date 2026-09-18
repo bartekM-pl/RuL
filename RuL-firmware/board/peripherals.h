@@ -9,12 +9,13 @@
 /***********************************************************************************************************************
  * Included files
  **********************************************************************************************************************/
+#include "fsl_dma.h"
+#include "fsl_dmamux.h"
 #include "fsl_common.h"
+#include "fsl_clock.h"
 #include "fsl_tpm.h"
 #include "fsl_spi.h"
 #include "fsl_spi_dma.h"
-#include "fsl_dma.h"
-#include "fsl_dmamux.h"
 #include "fsl_i2c.h"
 #include "fsl_i2c_dma.h"
 #include "fsl_adc16.h"
@@ -27,97 +28,85 @@ extern "C" {
  * Definitions
  **********************************************************************************************************************/
 /* Definitions for BOARD_InitPeripherals functional group */
-/* Definition of peripheral ID */
-#define TPM_2_PERIPHERAL TPM2
-/* Definition of the clock source frequency */
-#define TPM_2_CLOCK_SOURCE 8000000UL
-/* TPM_1 interrupt vector ID (number). */
-#define TPM_2_IRQN TPM2_IRQn
-/* TPM_1 interrupt handler identifier. */
-#define TPM_2_IRQHANDLER TPM2_IRQHandler
-
 /* Used DMA device. */
-#define DMA_1_DMA_BASEADDR DMA0
+#define DMA_DMA_BASEADDR DMA0
 /* Associated DMAMUX device that is used for muxing of requests. */
-#define DMA_1_DMAMUX_BASEADDR DMAMUX0
-
+#define DMA_DMAMUX_BASEADDR DMAMUX0
+/* Definition of peripheral ID */
+#define TPM2_PERIPHERAL TPM2
+/* Definition of the clock source frequency */
+#define TPM2_CLOCK_SOURCE 4000000UL
+/* TPM2 interrupt vector ID (number). */
+#define TPM2_IRQN TPM0_IRQn
+/* TPM2 interrupt handler identifier. */
+#define TPM2_IRQHANDLER 
 /* BOARD_InitPeripherals defines for SPI0 */
 /* Definition of peripheral ID */
-#define SPI_0_PERIPHERAL SPI0
+#define SPI0_PERIPHERAL SPI0
 /* Definition of the clock source */
-#define SPI_0_CLOCK_SOURCE SPI0_CLK_SRC
+#define SPI0_CLOCK_SOURCE SPI0_CLK_SRC
 /* Definition of the clock source frequency */
-#define SPI_0_CLK_FREQ CLOCK_GetFreq(SPI_0_CLOCK_SOURCE)
-/* SPI_0 DMA source request. */
-#define SPI_0_RX_DMA_REQUEST kDmaRequestMux0SPI0Rx
+#define SPI0_CLK_FREQ CLOCK_GetFreq(SPI0_CLOCK_SOURCE)
+/* SPI0 DMA source request. */
+#define SPI0_RX_DMA_REQUEST kDmaRequestMux0SPI0Rx
 /* Selected DMA channel number. */
-#define SPI_0_RX_DMA_CHANNEL 0
+#define SPI0_RX_DMA_CHANNEL 0
 /* DMAMUX device that is used for muxing of the request. */
-#define SPI_0_RX_DMAMUX_BASEADDR DMAMUX0
+#define SPI0_RX_DMAMUX_BASEADDR DMAMUX0
 /* Used DMA device. */
-#define SPI_0_RX_DMA_BASEADDR DMA0
-/* SPI_0 DMA source request. */
-#define SPI_0_TX_DMA_REQUEST kDmaRequestMux0SPI0Tx
+#define SPI0_RX_DMA_BASEADDR DMA0
+/* SPI0 DMA source request. */
+#define SPI0_TX_DMA_REQUEST kDmaRequestMux0SPI0Tx
 /* Selected DMA channel number. */
-#define SPI_0_TX_DMA_CHANNEL 1
+#define SPI0_TX_DMA_CHANNEL 1
 /* DMAMUX device that is used for muxing of the request. */
-#define SPI_0_TX_DMAMUX_BASEADDR DMAMUX0
+#define SPI0_TX_DMAMUX_BASEADDR DMAMUX0
 /* Used DMA device. */
-#define SPI_0_TX_DMA_BASEADDR DMA0
-
+#define SPI0_TX_DMA_BASEADDR DMA0
 /* BOARD_InitPeripherals defines for I2C0 */
 /* Definition of peripheral ID */
-#define I2C_0_PERIPHERAL I2C0
+#define I2C0_PERIPHERAL I2C0
 /* Definition of the clock source */
-#define I2C_0_CLOCK_SOURCE I2C0_CLK_SRC
+#define I2C0_CLOCK_SOURCE I2C0_CLK_SRC
 /* Definition of the clock source frequency */
-#define I2C_0_CLK_FREQ CLOCK_GetFreq(I2C_0_CLOCK_SOURCE)
-/* I2C_0 DMA source request. */
-#define I2C_0_DMA_REQUEST kDmaRequestMux0I2C0
+#define I2C0_CLK_FREQ CLOCK_GetFreq(I2C0_CLOCK_SOURCE)
+/* I2C0 DMA source request. */
+#define I2C0_DMA_REQUEST kDmaRequestMux0I2C0
 /* Selected DMA channel number. */
-#define I2C_0_DMA_CHANNEL 2
+#define I2C0_DMA_CHANNEL 2
 /* DMAMUX device that is used for muxing of the request. */
-#define I2C_0_DMAMUX_BASEADDR DMAMUX0
+#define I2C0_DMAMUX_BASEADDR DMAMUX0
 /* Used DMA device. */
-#define I2C_0_DMA_BASEADDR DMA0
-
+#define I2C0_DMA_BASEADDR DMA0
 /* Alias for ADC0 peripheral */
 #define ADC0_PERIPHERAL ADC0
 /* ADC0 interrupt vector ID (number). */
 #define ADC0_IRQN ADC0_IRQn
 /* ADC0 interrupt handler identifier. */
 #define ADC0_IRQHANDLER ADC0_IRQHandler
+/* Channel 0 (SE.23) conversion control group. */
+#define ADC0_CH0_CONTROL_GROUP 0
 
 /***********************************************************************************************************************
  * Global variables
  **********************************************************************************************************************/
-extern const tpm_config_t TPM_2_config;
-
-extern const spi_master_config_t SPI_0_config;
-extern dma_handle_t SPI_0_RX_Handle;
-extern dma_handle_t SPI_0_TX_Handle;
-extern spi_dma_handle_t SPI_0_DMA_Handle;
-
-extern const i2c_master_config_t I2C_0_config;
-extern dma_handle_t I2C_0_Handle;
-extern i2c_master_dma_handle_t I2C_0_DMA_Handle;
-
+extern const tpm_config_t TPM2_config;
+extern const spi_master_config_t SPI0_config;
+extern dma_handle_t SPI0_RX_Handle;
+extern dma_handle_t SPI0_TX_Handle;
+extern spi_dma_handle_t SPI0_DMA_Handle;
+extern const i2c_master_config_t I2C0_config;
+extern dma_handle_t I2C0_Handle;
+extern i2c_master_dma_handle_t I2C0_DMA_Handle;
 extern adc16_channel_config_t ADC0_channelsConfig[1];
 extern const adc16_config_t ADC0_config;
 extern const adc16_channel_mux_mode_t ADC0_muxMode;
 extern const adc16_hardware_average_mode_t ADC0_hardwareAverageMode;
 
 /***********************************************************************************************************************
- * Callback functions
- **********************************************************************************************************************/
-/* SPI DMA callback function for the SPI_0 component (init. function BOARD_InitPeripherals)*/
-extern void SPI_0_masterCallback(SPI_Type *,spi_dma_handle_t *,status_t ,void *);
-/* I2C DMA callback function for the I2C_0 component (init. function BOARD_InitPeripherals)*/
-extern void i2c_master_callback(I2C_Type *,i2c_master_dma_handle_t *,status_t ,void *);
-
-/***********************************************************************************************************************
  * Initialization functions
  **********************************************************************************************************************/
+
 void BOARD_InitPeripherals(void);
 
 /***********************************************************************************************************************

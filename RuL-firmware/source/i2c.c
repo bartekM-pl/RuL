@@ -33,7 +33,7 @@ void I2C_Send(uint8_t devAddress, uint32_t subAddress, uint8_t subAddressLength,
 	masterXfer.flags = kI2C_TransferDefaultFlag;
 
 	g_MasterCompletionFlag = false;
-	I2C_MasterTransferDMA(I2C_0_PERIPHERAL, &I2C_0_DMA_Handle, &masterXfer);
+	I2C_MasterTransferDMA(I2C0_PERIPHERAL, &I2C0_DMA_Handle, &masterXfer);
 	while(g_MasterCompletionFlag != true) {}
 }
 
@@ -47,6 +47,6 @@ void I2C_Read(uint8_t devAddress, uint32_t subAddress, uint8_t subAddressLength,
 	masterXfer.flags = kI2C_TransferDefaultFlag;
 
 	g_MasterCompletionFlag = false;
-	I2C_MasterTransferDMA(I2C_0_PERIPHERAL, &I2C_0_DMA_Handle, &masterXfer);
+	I2C_MasterTransferDMA(I2C0_PERIPHERAL, &I2C0_DMA_Handle, &masterXfer);
 	while(g_MasterCompletionFlag != true) {}
 }

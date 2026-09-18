@@ -2,7 +2,7 @@
 
 Working list for `RuL-firmware`. Check items off as they land. See `AGENTS.md` for hardware and architecture.
 
-Status today: `main()` inits LPS, LIS, OLED, and the flight FSM, then samples sensors on `meas_period`. OLED screens and button (next / sleep / 2 s power-off) run from SysTick. **Flash log is still commented. Flight transitions are still 3 s placeholders. The loop still buzzes every pass.**
+Status today: `main()` inits LPS, LIS, OLED, flash CS, and the flight FSM, probes WHO_AM_I / JEDEC, then samples sensors on `meas_period`. OLED screens and button (next / sleep / 2 s power-off) run from SysTick. Buzzer is a 1 ms service (`Buzzer_shortBeep` / `pulse` / `stop`). **Flash log is still commented. Flight transitions are still 3 s placeholders.** One short beep = bus OK; three beeps + red LED = ID fail.
 
 ---
 
@@ -10,16 +10,16 @@ Status today: `main()` inits LPS, LIS, OLED, and the flight FSM, then samples se
 
 - [x] Replace the infinite `Buzzer_ON()` loop in `source/main.c` with init + measure / detect / (log) / display.
 - [x] Call `LIS_init()`, `LPS_init()`, `OLED_init()`, `FlightState_Init(&sensors_d)` after `BOARD_Init*` / `PSU_turnOn()`.
-- [ ] Call `FLASH_init()` (and FS init once it exists).
+- [x] Call `FLASH_init()` (and FS init once it exists).
 - [x] Sample in the main loop using `meas_period` / `log_period`, not inside `SysTick_Handler`.
   - [x] `LIS_update(&sensors_d)`
   - [x] `LPS_update(&sensors_d)`
-  - [ ] `sensors_d.time = Clock`
+  - [x] `sensors_d.time = Clock`
   - [x] `FlightState_Detect(Clock)`
 - [x] OLED live: `OLED_render`, `OLED_nextScreen`, `OLED_sleepScreen` (still in SysTick — move out, see §4 / §5).
 - [x] Remove dead locals in `main()` (`TPM_2_config`, `TPM_2_pwmSignalParams`, unused `freq`).
-- [ ] Stop calling `Buzzer_ON()` + `delay(300)` every loop iteration (blocks sampling; beep should be event-based).
-- [ ] Confirm WHO_AM_I / JEDEC on hardware: `LIS_WhoIam()` → `0x44`, `LPS_WhoIam()` → `0xBD`, `SPI_MemoryCheck()` → `01 60 17`.
+- [x] Stop calling `Buzzer_ON()` + `delay(300)` every loop iteration (blocks sampling; beep should be event-based).
+- [x] Confirm WHO_AM_I / JEDEC on hardware: `LIS_WhoIam()` → `0x44`, `LPS_WhoIam()` → `0xBD`, `SPI_MemoryCheck()` → `01 60 17`. (boot: 1 beep = OK, 3 beeps + red LED = fail)
 
 ## 2. Flight detection (placeholder today)
 
@@ -47,7 +47,7 @@ Keep this logic in `flightStateDetector.c`, not SysTick.
 
 `FLASH_writeByte` / `readByte` / page helpers exist. Buffering, erase, and FS are empty. Main loop log slot is `//FLASH_write(&sensors_d);`.
 
-- [ ] Implement `FLASH_init()` (mode, 4-byte addressing if needed, status check) and call it from `main()`.
+- [ ] Implement `FLASH_init()` body (4-byte addressing if needed, wait-ready with timeout). Today it only deasserts CS and leaves sensor SPI mux.
 - [ ] Implement `FLASH_sectorErase()`.
 - [ ] Implement `FLASH_push` / buffer / `FLASH_write` so `sensors_t` records (32 B) can be appended.
 - [ ] Uncomment / wire the `counter_log` path in `main()`.
@@ -90,9 +90,8 @@ Keep this logic in `flightStateDetector.c`, not SysTick.
 
 ## Suggested order
 
-1. Drop the always-on buzzer/`delay(300)` from the main loop so sampling is real.
-2. WHO_AM_I + flash JEDEC on hardware; call `FLASH_init()`.
-3. Move OLED work out of SysTick.
-4. Real altitude / maxima, then flight FSM (periods in `main()` already wait on state).
-5. Flash append log + `memfree`.
-6. Power modes and landing behavior.
+1. On hardware: 1 beep vs 3 beeps + red LED (WHO_AM_I / JEDEC).
+2. Move OLED work out of SysTick.
+3. Real altitude / maxima, then flight FSM (periods in `main()` already wait on state).
+4. Flash append log + `memfree` (`FLASH_init` is CS/mode only; write path still commented).
+5. Power modes and landing behavior.

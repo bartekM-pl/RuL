@@ -18,11 +18,11 @@
 /* clang-format off */
 /* TEXT BELOW IS USED AS SETTING FOR TOOLS *************************************
 !!GlobalInfo
-product: Clocks v7.0
+product: Clocks v17.0
 processor: MKL27Z256xxx4
 package_id: MKL27Z256VFM4
 mcu_data: ksdk2_0
-processor_version: 8.0.1
+processor_version: 13.0.1
  * BE CAREFUL MODIFYING THIS COMMENT - IT IS YAML SETTINGS FOR TOOLS **********/
 /* clang-format on */
 
@@ -39,8 +39,6 @@ processor_version: 8.0.1
 /*******************************************************************************
  * Variables
  ******************************************************************************/
-/* System clock frequency. */
-extern uint32_t SystemCoreClock;
 
 /*******************************************************************************
  ************************ BOARD_InitBootClocks function ************************

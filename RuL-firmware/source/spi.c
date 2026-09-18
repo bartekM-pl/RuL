@@ -52,6 +52,6 @@ void SPI_RW(uint8_t * in, uint8_t * out, uint16_t length){
 	xfer.dataSize = length;
 
 	masterFinished = false;
-	SPI_MasterTransferDMA(SPI_0_PERIPHERAL, &SPI_0_DMA_Handle, &xfer);
+	SPI_MasterTransferDMA(SPI0_PERIPHERAL, &SPI0_DMA_Handle, &xfer);
 	while(masterFinished != true) {}
 }

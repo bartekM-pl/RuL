@@ -8,6 +8,7 @@
 #ifndef FS_H_
 #define FS_H_
 
+void FS_initFS();
 uint8_t FS_testWR(uint32_t address);
 
 #endif /* FS_H_ */
