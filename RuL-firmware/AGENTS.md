@@ -30,7 +30,7 @@ startup/         Vector table / reset (startup_mkl27z4.c)
 
 | File | Role |
 |---|---|
-| `source/main.c` | Boot, SysTick, ADC ISR, button/power, **currently a buzzer-only main loop** |
+| `source/main.c` | Boot, SysTick (button + OLED), ADC ISR, measure loop + flight FSM; flash log commented |
 | `source/struct.h` | Shared types: `sensors_t`, `stat_t`, `max_t` |
 | `source/utils.c` | Blocking `delay()`, RGB LEDs, button, power GPIO |
 | `source/spi.c` | SPI0 DMA master + chip-selects + MOSI/MISO remap for flash |
@@ -91,20 +91,37 @@ LEDs are **active-low**: `LED_*(1)` turns the LED on.
 SysTick 1 ms
   ├─ delay() countdown
   ├─ Clock++, counter_meas, counter_log
-  ├─ every 100 ms: button hold 2 s → PSU_turnOff(); short press ≥300 ms → next OLED screen (commented)
-  ├─ idle >5 s → OLED sleep (commented)
-  ├─ every 250 ms → OLED_render (commented)
+  ├─ every 100 ms: button hold 2 s → OLED clear + PSU_turnOff();
+  │                 short press ≥300 ms → OLED_nextScreen()
+  ├─ idle >5 s → OLED_sleepScreen()
+  ├─ every 250 ms → OLED_render(&status_d, &sensors_d, &max_d)
   └─ heartbeat green LED (~3 s double blink)
 
 ADC0 IRQ → Analog_setVbatRaw → status_d.vbat
            status_d.memfree currently hardcoded 100.0f
 
-Intended loop (not wired in main today):
-  LIS_update / LPS_update → sensors_d
-  FlightState_Detect(Clock)
-  FLASH / FS log
-  OLED_render(&status_d, &sensors_d, &max_d)
+main():
+  PSU_turnOn → LPS_init → LIS_init → OLED_init → FlightState_Init
+  OLED status template
+  loop:
+    set meas_period / log_period from FlightState_getState()
+    if counter_meas elapsed: LPS_update, LIS_update, FlightState_Detect(Clock)
+    Buzzer_ON(); delay(300)          ← still every iteration
+    if counter_log elapsed: FLASH_write commented out
 ```
+
+State-dependent periods (ms, matching SysTick 1 ms counters):
+
+| State | `meas_period` | `log_period` |
+|---|---|---|
+| WAIT_FOR_LAUNCH | 100 | 500 |
+| ASCENT | 100 | 100 |
+| FALLING | 500 | 500 |
+| LANDING | 500 | 1000 |
+
+OLED and button handling run in `SysTick_Handler`. I2C/SPI helpers are blocking DMA polls — **not ISR-safe**. `OLED_render` / `OLED_nextScreen` / power-off wait-for-release from SysTick can stall the 1 ms tick.
+
+`FLASH_init()` is not called. `sensors_d.time` is never written. `max_d` is zeroed at boot and never updated.
 
 ### Shared data (`struct.h`)
 
@@ -127,18 +144,19 @@ Each state has a one-shot `state_ready` init, then a transition. **Current trans
 1: max meas (velocity, acc, altitude)  
 2: sleep / off  
 
-Short button press was meant to call `OLED_nextScreen()`.
+Short button press calls `OLED_nextScreen()` from SysTick.
 
 ## Current completeness (do not assume it flies)
 
-`main()` after board init only latches power and **buzzes forever**. Sensor init, flash, OLED, flight FSM, and logging are **not called**.
+`main()` latches power, inits LPS / LIS / OLED / flight FSM, then samples sensors and runs `FlightState_Detect`. OLED UI is live in SysTick. **Flash is not inited; `FLASH_write` is commented.** Flight transitions are still 3 s placeholders. The main loop still **buzzes every iteration** (`Buzzer_ON` + `delay(300)`), which blocks sampling.
 
-OLED / next-screen / sleep calls in `SysTick_Handler` are commented out.
+Boot `printf` traces exist (`MCU ready`, `LPS/LIS/OLED ready`). `SDK_DEBUGCONSOLE=0` — they only appear if semihosting / another console is actually wired.
 
 Incomplete or suspicious:
 
 - `FS.c` — empty `FS_initFS`, table/page scanners; only `FS_testWR`.
-- `flash.c` — `FLASH_init`, `FLASH_sectorErase`, `FLASH_push`, buffer helpers empty. `FLASH_write(sensors_t*)` commented.
+- `flash.c` — `FLASH_init`, `FLASH_sectorErase`, `FLASH_push`, buffer helpers empty. `FLASH_write(sensors_t*)` commented in both `flash.c` and the main log slot.
+- OLED I2C from `SysTick_Handler` (render / next screen / clear on power-off).
 - `PSU_lowPowerMode` / `highPowerMode` empty.
 - `I2C_Read` uses `dataSize = length-1` with a `????` comment — treat as a bug until proven.
 - `LPS_readRegN` / `LIS_readRegN` pass `val` as RX buffer but TX command is in a local `buf` — multi-byte reads may be wrong.
@@ -180,9 +198,9 @@ There is no CMake / Makefile checked in; the Eclipse managed builder generates `
 
 1. Smallest change that matches existing module style. New sensors or buses get their own `source/` pair, not a dump into `main.c`.
 2. Keep `sensors_t` 32 bytes if flash logging will use the union overlay.
-3. Restore or wire the intended main loop rather than inventing a second architecture, unless the task is a redesign.
+3. Extend the existing main loop (state periods → measure → log) rather than inventing a second architecture, unless the task is a redesign.
 4. Flight detection belongs in `flightStateDetector.c`, not in `SysTick_Handler`.
-5. Do not busy-wait in ISRs. SysTick already does too much; add work to the main loop with flags/`Clock` periods (`meas_period`, `log_period` exist for that).
+5. Do not busy-wait in ISRs. SysTick already drives OLED over blocking I2C; move render / next-screen / sleep to the main loop with flags. `meas_period` / `log_period` already gate sensor work.
 6. Test thoughts: WHO_AM_I (`LIS_WhoIam` 0x44, `LPS_WhoIam` 0xBD), `SPI_MemoryCheck()`, `FS_testWR()`, OLED templates, power latch, button timings (100 ms tick, 20 ticks ≈ 2 s hold).
 7. Do not commit secrets, local MCUXpresso absolute include paths, or generated `Debug/`/`Release/` trees.
 

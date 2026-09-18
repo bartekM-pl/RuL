@@ -7,12 +7,12 @@ MCU: NXP **MKL27Z256VFM4** (Cortex-M0+, 8 MHz). No RTOS. Built with MCUXpresso /
 ## What it does
 
 - Samples accelerometer (LIS2HH12) and barometer (LPS25HB)
-- Detects flight phases (launch → ascent → falling → landing)
-- Logs records to SPI NOR flash (S25FL064L)
-- Shows status on a 96×32 OLED
+- Detects flight phases (launch → ascent → falling → landing) — **3 s placeholders**, not real flight logic
+- Logs records to SPI NOR flash (S25FL064L) — **write path still commented**
+- Shows status on a 96×32 OLED (button cycles screens; 5 s idle sleeps)
 - Power latch, RGB LEDs, buzzer, battery ADC
 
-**Current tree is incomplete:** `main()` only holds power and buzzes. Sensors, OLED, logging, and real flight detection are not wired yet. See [TODO.md](TODO.md).
+Boot: power latch → LPS / LIS / OLED init → flight FSM → measure loop. Sample and log rates depend on flight state. Flash is not initialized. The loop still calls `Buzzer_ON()` every pass. See [TODO.md](TODO.md).
 
 ## Layout
 
